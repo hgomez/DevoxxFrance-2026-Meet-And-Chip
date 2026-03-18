@@ -1,0 +1,20 @@
+name: PlatformIO Lib Check
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Tous les lundis à minuit
+  workflow_dispatch:   # Pour le lancer à la main pendant ta démo !
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Check for library updates
+        run: pio pkg update --dry-run

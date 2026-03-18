@@ -28,3 +28,7 @@ PlatformIO devrait reconnaître automatiquement votre carte. Lancez le programme
 ## Etape 1
 
 Allez on s'amuse un peu avec notre badge qui a des leds. Récupérez le tag "etape-1" pour voir un exemple de ce qu'on peut faire avec les leds.
+
+## Etape 2
+
+On rentre dans le vif du sujet. Allez on s'amuse un peu avec notre badge qui a des leds. Récupérez le tag "etape-2" pour voir le programme terminé.

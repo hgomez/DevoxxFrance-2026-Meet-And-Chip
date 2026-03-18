@@ -24,3 +24,5 @@ Ce projet a été réalisé avec PlatformIO et VSCode.
 #### Testez votre configuration
 
 PlatformIO devrait reconnaître automatiquement votre carte. Lancez le programme et visualisez le résultat et vous verrez un message apparaitre dans la console série attaché à la carte
+
+[![PlatformIO CI](https://github.com/hgomez/DevoxxFrance-2026-Meet-And-Chip/actions/workflows/compile.yml/badge.svg)](https://github.com/hgomez/DevoxxFrance-2026-Meet-And-Chip/actions)

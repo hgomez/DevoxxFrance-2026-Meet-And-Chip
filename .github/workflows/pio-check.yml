@@ -17,5 +17,5 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
       - name: Check for library updates
-        run: pio pkg update --dry-run
+        run: pio pkg list --outdated
 

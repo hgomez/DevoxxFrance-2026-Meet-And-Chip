@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # 🤖 Surveille les versions des GitHub Actions (checkout, cache, etc.)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # 🐍 Optionnel : Surveille aussi PlatformIO/Python si tu as un requirements.txt
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"

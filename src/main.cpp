@@ -215,6 +215,23 @@ void updateTopic(int peerIdx,char * topic) {
 }
 
 /**
+ * Dump Peers
+ */
+void dump_peers() {
+  int i;
+  peer_t *peers_pt = &peers[0];
+
+  for (i = 0; i < MAX_DEVICES; i++) {
+
+    if (peers_pt->initialized)
+      Serial.printf("Peer : Id: %.5s lastUpdate: %d lastRssi: %d detractorCount: %d matchCount: %d\n", peers_pt->peerId, peers_pt->lastUpdate, peers_pt->lastRssi, peers_pt->detractorCount, peers_pt->matchCount);
+    
+    peers_pt++;
+  }
+}
+
+
+/**
   * Scan callback
   */
 void scan_callback(ble_gap_evt_adv_report_t* report)
@@ -240,6 +257,8 @@ void scan_callback(ble_gap_evt_adv_report_t* report)
               peers[i].lastRssi = report->rssi;
               updateTopic(i,top);
             }
+
+            dump_peers();
             break;
           }
           if ( !peers[i].initialized ) {k = i; i = MAX_DEVICES;} else i++;
@@ -254,6 +273,8 @@ void scan_callback(ble_gap_evt_adv_report_t* report)
           peers[k].detractorCount = 0;
           bzero(peers[k].topics,MAX_TOPICS*TOPIC_SZ);
           updateTopic(k,top);
+
+          dump_peers();
         }
       }
       //Serial.printf("Rx %s %s with rssi %d\r\n",adr,top,report->rssi);
@@ -262,8 +283,13 @@ void scan_callback(ble_gap_evt_adv_report_t* report)
   Bluefruit.Scanner.resume();
 }
 
+#define PEER_FAR_AWAY -126
+#define MAX_IN_RANGE_PEER -119
+#define NEAR_PEER -55
 
 void loop() {
+
+  peer_t * peer_pt;
 
   // Manage bootloader switch for over_the_cable fw update (type ! on serial console)
   while ( Serial && Serial.available() ) if (Serial.read()=='!') enterSerialDfu();
@@ -272,17 +298,46 @@ void loop() {
   // clear rssi for old peers ( not updated since 10 seconds )
   for ( int i = 0; i < MAX_DEVICES; i++ ) {
     if ( peers[i].initialized && (millis() - peers[i].lastUpdate) > 10000 ) {
-      peers[i].lastRssi = -120;
+      peers[i].lastRssi = PEER_FAR_AWAY;
     }
   }
 
   // Detect close devices with -55dBm or more
   int closeDevices = 0;
-  int bestRssi=-120, bestId=MAX_DEVICES+1;
+  int activeDevices = 0;
+
+  int matchers = 0;
+  int detractors = 0;
+  
+  int bestRssi = MAX_IN_RANGE_PEER;
+  int bestId = MAX_DEVICES + 1;
+
+  peer_pt = &peers[0];
+
   for ( int i = 0; i < MAX_DEVICES; i++ ) {
-    if ( peers[i].initialized && peers[i].lastRssi >= -55 ) {
-      closeDevices++;
-      if ( bestRssi < peers[i].lastRssi ) { bestId = i ; bestRssi = peers[i].lastRssi; }
+
+    // Found an initialized peer?
+    if (peer_pt->initialized) { 
+      
+      // it's an active Peer if not too far
+      if (peer_pt->lastRssi >= PEER_FAR_AWAY)
+        activeDevices++;
+    
+      if (peer_pt->matchCount > peer_pt->detractorCount)
+        matchers++;
+      else if (peer_pt->matchCount < peer_pt->detractorCount)
+        detractors++;
+
+      // Close Peer if rssi is low enough
+      if (peer_pt->lastRssi >= NEAR_PEER) {
+        closeDevices++;
+        
+        // New best rssi (closest peer) ?
+        if (bestRssi < peer_pt->lastRssi) { 
+          bestId = i; 
+          bestRssi = peer_pt->lastRssi; 
+        }
+      }
     }
   }
 
@@ -293,7 +348,9 @@ void loop() {
   analogWrite(D6,0);
   analogWrite(D7,0);
   analogWrite(D8,0);
-  if ( closeDevices == 0 ) {
+
+  // If we don't find any active devices 
+  if (activeDevices == 0) {
     static int cnt = 0;
     switch(cnt) {
       case 0 : analogWrite(D7,20);analogWrite(D8,30);analogWrite(D3,120);break;
@@ -304,48 +361,47 @@ void loop() {
       case 5 : analogWrite(D6,10);analogWrite(D7,40);analogWrite(D8,100);break;
       default: break;
     }
-    //digitalWrite(LED_BUILTIN,(cnt&1)?HIGH:LOW);
+
     cnt = ( cnt + 1 ) % 6;
     delay(300);
-  } else {
-    // find best device
-    if ( peers[bestId].matchCount >= 1 ) analogWrite(D3,120);
-    if ( peers[bestId].matchCount >= 2 ) analogWrite(D5,120);
-    if ( peers[bestId].matchCount >= 3 ) analogWrite(D7,120);
-    if ( peers[bestId].detractorCount >= 1 ) analogWrite(D4,120);
-    if ( peers[bestId].detractorCount >= 2 ) analogWrite(D6,120);
-    if ( peers[bestId].detractorCount >= 3 ) analogWrite(D8,120);
-    delay(1000);
-  }
+  } 
+  else {
+
+    // If we don't find any active devices, show affinity around (all close peers) 
+    if (closeDevices == 0) {
+
+      Serial.printf("No close devices\n");
+
+      int matchpct = (100 * matchers) / activeDevices;
+      int detractorpct = (100 * detractors) / activeDevices;
+      
+      Serial.printf("matchpct: %d detractorpct: %d\n", matchpct, detractorpct);
+
+      if (matchpct >= 20) analogWrite(D3, (120 * 33) / (matchpct % 33));
+      if (matchpct >= 35) analogWrite(D4, (120 * 66) / (matchpct % 66));
+      if (matchpct >= 68) analogWrite(D5, (120 * 99) / (matchpct % 99));
+      if (detractorpct >= 20) analogWrite(D6, (120 * 33) / (matchpct % 33));
+      if (detractorpct >= 35) analogWrite(D7, (120 * 66) / (matchpct % 66));
+      if (detractorpct >= 68) analogWrite(D8, (120 * 99) / (matchpct % 99));
+      delay(1000);
+
+    }
+    else {
+
+      Serial.printf("closest peer %d\n",bestId);
+
+      // Affinity for closest peer
+      if ( peers[bestId].matchCount >= 1 ) analogWrite(D3,120);
+      if ( peers[bestId].matchCount >= 2 ) analogWrite(D4,120);
+      if ( peers[bestId].matchCount >= 3 ) analogWrite(D5,120);
+      if ( peers[bestId].detractorCount >= 1 ) analogWrite(D6,120);
+      if ( peers[bestId].detractorCount >= 2 ) analogWrite(D7,120);
+      if ( peers[bestId].detractorCount >= 3 ) analogWrite(D8,120);
+      delay(1000);
+    }
 
   // Sometime the advertizing is killed... resume it
-  if ( (millis() - watchdog) > 5000 ) {
-     adv_stop_callback();
+    if ( (millis() - watchdog) > 5000 )
+      adv_stop_callback();
   }
-
-  // Debug ----
-  /*
-  static uint32_t lastPrint = 0;
-  if ( millis() - lastPrint > 3000 ) {
-    lastPrint = millis();
-    // Every 3 seconds print the peers info
-    Serial.printf("Peers:\r\n");
-    for ( int i = 0; i < MAX_DEVICES; i++ ) {
-      if ( peers[i].initialized ) {
-        Serial.printf("[%s] Rssi:%d Last:%dms Matches:%d Detractors:%d ",
-          peers[i].peerId,
-          peers[i].lastRssi,
-          millis() - peers[i].lastUpdate,
-          peers[i].matchCount,
-          peers[i].detractorCount
-        );
-        int k = 0 ; while ( peers[i].topics[k][0] != 0 && k < MAX_TOPICS ) {
-          Serial.printf(" (%s)",peers[i].topics[k]);
-          k++;
-        }
-        Serial.printf("\r\n");
-      }
-    }
-  }
-  */
 }
